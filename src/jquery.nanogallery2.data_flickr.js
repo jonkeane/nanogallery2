@@ -4,9 +4,9 @@
  * Sources:  https://github.com/nanostudio-org/nanogallery2
  *
  * License:  GPLv3 and commercial licence
- * 
+ *
 */
- 
+
 // ############################################
 // ##### nanogallery2 - module for FLICKR #####
 // ############################################
@@ -26,7 +26,7 @@
     }
 }(function ($) {
 // ;(function ($) {
-  
+
   jQuery.nanogallery2.data_flickr = function (instance, fnName){
     var G = instance;      // current nanogallery2 instance
 
@@ -44,8 +44,8 @@
       photoAvailableSizes :     new Array(75, 100, 150, 240, 500, 640, 1024, 1024, 1600, 2048, 10000),
       photoAvailableSizesStr :  new Array('sq', 't', 'q', 's', 'm', 'z', 'b', 'l', 'h', 'k', 'o')
     };
-    
-    
+
+
     /** @function AlbumGetContent */
     var AlbumGetContent = function(albumID, fnToCall, fnParam1, fnParam2) {
       if( G.O.flickrAPIKey == '' ) {
@@ -72,24 +72,24 @@
           }
 
       if( G.O.debugMode ) { console.log('Flickr URL: ' + url); }
-          
+
       PreloaderDisplay(true);
       jQuery.ajaxSetup({ cache: false });
       jQuery.support.cors = true;
-      
+
       var tId = setTimeout( function() {
         // workaround to handle JSONP (cross-domain) errors
         PreloaderDisplay(false);
         NanoAlert(G, 'Could not retrieve AJAX data...');
       }, 60000 );
-      
+
       var sourceData=[];
 
       // Process the downloaded data
       var FlickrGetDone = function() {
         clearTimeout(tId);
         PreloaderDisplay(false);
-        
+
         // go through sourceData, and exclude blacklisted tags
         sourceData = FilterByTags(sourceData, G.O.tagBlockList);
 
@@ -99,14 +99,14 @@
         else {
           FlickrParsePhotos(albumIdx, albumID, sourceData);
         }
-        
+
         AlbumPostProcess( albumID );
-        
+
         if( fnToCall !== null &&  fnToCall !== undefined) {
           fnToCall( fnParam1, fnParam2, null );
         }
       }
-      
+
       // download one page of data (=500 entries)
       var FlickrGetOnePage = function( url, page ) {
         jQuery.getJSON( url + '&page=' + page + '&jsoncallback=?', function(data, status, xhr) {
@@ -138,9 +138,9 @@
               sourceData=sourceData.concat(data.photoset.photo);
               pages=data.photoset.pages;
             }
-            
+
           }
-          
+
           if( pages > page ) {
             FlickrGetOnePage(url, page+1);
           }
@@ -155,22 +155,22 @@
         });
 
       }
-      
+
       FlickrGetOnePage(url, 1);
-      
+
     }
 
 
-    
+
     // -----------
     // Retrieve items for one Flickr photoset
     function FlickrParsePhotos( albumIdx, albumID, source ) {
 
-      if( G.O.debugMode ) { 
+      if( G.O.debugMode ) {
         console.log('Flickr parse photos:');
-        console.dir(source);    
+        console.dir(source);
       }
-      
+
       jQuery.each(source, function(i,item){
 
         var itemID = item.id;
@@ -185,7 +185,7 @@
 
         // get the description
         var itemDescription=item.description._content;
-        
+
         // retrieve the image size with highest available resolution
         var imgW=75, imgH=75;
         var start=Flickr.photoAvailableSizesStr.length-1;
@@ -205,19 +205,47 @@
             sizes[p]=item[p];
           }
         }
-        
+
         // tags
         var tags = item.tags !== undefined ? item.tags : '';
 
+
         // create item
         var newItem = NGY2Item.New( G, itemTitle, itemDescription, itemID, albumID, 'image', tags );
+
+        // grab EXIF data
+        jQuery.ajaxSetup({ cache: false });
+        jQuery.support.cors = true;
+
+        var sourceData=[];
+
+        var tId = setTimeout( function() {
+            // workaround to handle JSONP (cross-domain) errors
+            NanoAlert('Could not retrieve AJAX data...');
+        }, 1000 );
+
+            url = Flickr.url() + "?&method=flickr.photos.getExif&api_key=" + G.O.flickrAPIKey + "&photo_id="+itemID+"&format=json";
+            console.log(url);
+
+            jQuery.getJSON( url + '&jsoncallback=?' , function(data, status, xhr) {
+                    console.log(data);
+                    newItem.exif.camera = data.photo.camera;
+
+                    clearTimeout(tId);
+                    return true;
+
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    console.log("error " + textStatus);
+                    console.log("incoming Text " + jqXHR.responseText);
+                    console.log(errorThrown);
+            })
 
         // add image
         newItem.setMediaURL( imgUrl, 'img');
         newItem.imageWidth = imgW;
         newItem.imageHeight = imgH;
 
-        
+
         // add thumbnails
         var tn = {
           url:    { l1 : { xs:'', sm:'', me:'', la:'', xl:'' }, lN : { xs:'', sm:'', me:'', la:'', xl:'' } },
@@ -227,36 +255,36 @@
         tn = FlickrRetrieveImages(tn, item, 'l1' );
         tn = FlickrRetrieveImages(tn, item, 'lN' );
         newItem.thumbs=tn;
-        
+
         // post-process callback
         var fu = G.O.fnProcessData;
         if( fu !== null ) {
           typeof fu == 'function' ? fu(newItem, 'flickr', item) : window[fu](newItem, 'flickr', item);
         }
-        
+
 
       });
       G.I[albumIdx].contentIsLoaded=true;
-      
-    }    
+
+    }
 
 
-    
+
     // -----------
     // Retrieve the list of Flickr photosets
     function FlickrParsePhotoSets( albumIdx, albumID, source ) {
 
-      if( G.O.debugMode ) { 
+      if( G.O.debugMode ) {
         console.log('Flickr parse list of albums:');
-        console.dir(source);    
+        console.dir(source);
       }
 
       jQuery.each(source, function(i,item){
         //Get the title
         var itemTitle = item.title._content;
-        
+
         if( item.visibility_can_see_set == 0 ) { return true; }    // skip it
-        
+
         if( FilterAlbumName(itemTitle, item.id) ) {
           var itemID=item.id;
           //Get the description
@@ -272,11 +300,11 @@
               tags = item.primary_photo_extras.tags;
             }
           }
-        
+
           var newItem = NGY2Item.New( G, itemTitle, itemDescription, itemID, albumID, 'album', tags );
           newItem.numberItems = item.photos;
           newItem.thumbSizes = sizes;
-          
+
           var tn = {
             url:    { l1 : { xs:'', sm:'', me:'', la:'', xl:'' }, lN : { xs:'', sm:'', me:'', la:'', xl:'' } },
             width:  { l1 : { xs:0, sm:0, me:0, la:0, xl:0 }, lN : { xs:0, sm:0, me:0, la:0, xl:0 } },
@@ -291,10 +319,10 @@
           if( fu !== null ) {
             typeof fu == 'function' ? fu(newItem, 'flickr', item) : window[fu](newItem, 'flickr', item);
           }
-          
+
         }
       });
-      
+
       G.I[albumIdx].contentIsLoaded=true;
     }
 
@@ -304,8 +332,8 @@
       if( G.tn.opt[level].crop === true ) {
         sf=G.O.thumbnailCropScaleFactor;
       }
-    
-    
+
+
       var sizes=['xs','sm','me','la','xl'];
       for( var i=0; i<sizes.length; i++ ) {
         if( G.tn.settings.width[level][sizes[i]] == 'auto' || G.tn.settings.width[level][sizes[i]] == '' ) {
@@ -316,7 +344,7 @@
           tn.width[level][sizes[i]]=one.width;
           tn.height[level][sizes[i]]=one.height;
         }
-        else 
+        else
           if( G.tn.settings.height[level][sizes[i]] == 'auto' || G.tn.settings.height[level][sizes[i]] == '' ) {
             let sdir='width_';
             let tsize=Math.ceil( G.tn.settings.width[level][sizes[i]] * G.tn.scale * sf * G.tn.settings.mosaic[level+'Factor']['w'][sizes[i]] );
@@ -340,7 +368,7 @@
       }
       return tn;
     }
-    
+
     function FlickrRetrieveOneImage(sdir, tsize, item ) {
       var one={ url: '', width: 0, height: 0 };
       var tnIndex=0;
@@ -359,7 +387,7 @@
       one.height = parseInt(item['height_'+fSize]);
       return one;
     }
-    
+
     var FilterByTags = function(data, tagBlockList) {
       if( tagBlockList!= '' && data != undefined) {
         data = data.filter(function (item) {
@@ -373,11 +401,11 @@
       }
       return data;
     };
-    
+
     /** @function GetHiddenAlbums */
     // var GetHiddenAlbums = function( hiddenAlbums, callback ){
       // not supported -> doesn't exit in Flickr
-      // callback();     
+      // callback();
     // }
 
     // -----------
@@ -415,10 +443,7 @@
     }
 
   };
-  
+
 // END FLICKR DATA SOURCE FOR NANOGALLERY2
 // }( jQuery ));
 }));
-
-  
-  
