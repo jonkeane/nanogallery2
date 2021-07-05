@@ -181,7 +181,7 @@
               if( data.photo.camera !== undefined ) { newItem.exif.model = data.photo.camera; }
               // Exif - lens
               var lens = data.photo.exif.filter(function(exif) {return exif.tag == "LensModel"})
-              if( lens.length == 1 ) { newItem.exif.lens = lens[0].raw._content; }
+              if( lens.length >= 1 ) { newItem.exif.lens = lens[0].raw._content; }
               // Exif - flash
               var flash = data.photo.exif.filter(function(exif) {return exif.tag == "Flash"})
               if( flash.length >= 1 ) { newItem.exif.flash = flash[0].raw._content; }
